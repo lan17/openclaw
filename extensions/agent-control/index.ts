@@ -329,8 +329,11 @@ export default function register(api: OpenClawPluginApi) {
         });
 
         if (evaluation.isSafe) {
+          api.logger.info("safe !");
           return;
         }
+
+        api.logger.info("unsafe !");
 
         return {
           block: true,
