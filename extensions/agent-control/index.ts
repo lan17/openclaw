@@ -275,6 +275,9 @@ export default function register(api: OpenClawPluginApi) {
     async (event, ctx) => {
       const sourceAgentId = resolveSourceAgentId(ctx.agentId);
       const state = getOrCreateState(sourceAgentId);
+      api.logger.info(
+        `agent-control: before_tool_call entered agent=${sourceAgentId} tool=${event.toolName}`,
+      );
 
       try {
         await syncAgent(state);
