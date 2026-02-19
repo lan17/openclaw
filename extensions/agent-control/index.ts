@@ -152,6 +152,21 @@ function resolveSourceAgentId(agentId: string | undefined): string {
   return normalized ?? "default";
 }
 
+function formatToolArgsForLog(params: unknown): string {
+  if (params === undefined) {
+    return "undefined";
+  }
+  try {
+    const encoded = JSON.stringify(params);
+    if (typeof encoded !== "string") {
+      return trimToMax(String(params), 1000);
+    }
+    return trimToMax(encoded, 1000);
+  } catch {
+    return "[unserializable]";
+  }
+}
+
 function loadPluginConfig(api: OpenClawPluginApi): AgentControlPluginConfig {
   const raw = isRecord(api.pluginConfig) ? api.pluginConfig : {};
   return raw as unknown as AgentControlPluginConfig;
@@ -275,8 +290,9 @@ export default function register(api: OpenClawPluginApi) {
     async (event, ctx) => {
       const sourceAgentId = resolveSourceAgentId(ctx.agentId);
       const state = getOrCreateState(sourceAgentId);
+      const argsForLog = formatToolArgsForLog(event.params);
       api.logger.info(
-        `agent-control: before_tool_call entered agent=${sourceAgentId} tool=${event.toolName}`,
+        `agent-control: before_tool_call entered agent=${sourceAgentId} tool=${event.toolName} args=${argsForLog}`,
       );
 
       try {

@@ -160,7 +160,9 @@ describe("agent-control plugin", () => {
       }),
     );
     expect(api.logger.info).toHaveBeenCalledWith(
-      expect.stringContaining("before_tool_call entered agent=main tool=exec"),
+      expect.stringContaining(
+        'before_tool_call entered agent=main tool=exec args={"command":"rm -rf /"}',
+      ),
     );
     expect(result).toEqual(
       expect.objectContaining({
