@@ -1,0 +1,17 @@
+{
+  "name": "@openclaw/agent-control",
+  "version": "2026.2.18",
+  "description": "OpenClaw Agent Control plugin",
+  "type": "module",
+  "dependencies": {
+    "agent-control": "^0.1.1"
+  },
+  "devDependencies": {
+    "openclaw": "workspace:*"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}
