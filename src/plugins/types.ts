@@ -361,6 +361,13 @@ export type PluginHookBeforeAgentStartEvent = {
 export type PluginHookBeforeAgentStartResult = PluginHookBeforePromptBuildResult &
   PluginHookBeforeModelResolveResult;
 
+// Tool entry exposed to plugin hooks (read-only summary of an agent tool).
+export type PluginHookToolEntry = {
+  name: string;
+  description?: string;
+  inputSchema?: Record<string, unknown>;
+};
+
 // llm_input hook
 export type PluginHookLlmInputEvent = {
   runId: string;
@@ -371,6 +378,8 @@ export type PluginHookLlmInputEvent = {
   prompt: string;
   historyMessages: unknown[];
   imagesCount: number;
+  /** Resolved tools available to the model for this run. */
+  tools?: PluginHookToolEntry[];
 };
 
 // llm_output hook

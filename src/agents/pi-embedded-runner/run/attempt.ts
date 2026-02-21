@@ -1023,6 +1023,11 @@ export async function runEmbeddedAttempt(
                   prompt: effectivePrompt,
                   historyMessages: activeSession.messages,
                   imagesCount: imageResult.images.length,
+                  tools: tools.map((t) => ({
+                    name: t.name,
+                    description: t.description,
+                    inputSchema: t.parameters as Record<string, unknown> | undefined,
+                  })),
                 },
                 {
                   agentId: hookAgentId,
