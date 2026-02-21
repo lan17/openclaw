@@ -31,6 +31,46 @@ describe("llm hook runner methods", () => {
     );
   });
 
+  it("runLlmInput passes tools array when provided", async () => {
+    const handler = vi.fn();
+    const registry = createMockPluginRegistry([{ hookName: "llm_input", handler }]);
+    const runner = createHookRunner(registry);
+
+    const tools = [
+      { name: "exec", description: "Run shell commands", inputSchema: { type: "object" } },
+      { name: "read", description: "Read files" },
+    ];
+
+    await runner.runLlmInput(
+      {
+        runId: "run-2",
+        sessionId: "session-2",
+        provider: "anthropic",
+        model: "claude-opus-4",
+        prompt: "test",
+        historyMessages: [],
+        imagesCount: 0,
+        tools,
+      },
+      {
+        agentId: "main",
+        sessionId: "session-2",
+      },
+    );
+
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: "run-2",
+        tools: expect.arrayContaining([
+          expect.objectContaining({ name: "exec", description: "Run shell commands" }),
+          expect.objectContaining({ name: "read", description: "Read files" }),
+        ]),
+      }),
+      expect.objectContaining({ sessionId: "session-2" }),
+    );
+    expect(handler.mock.calls[0][0].tools).toHaveLength(2);
+  });
+
   it("runLlmOutput invokes registered llm_output hooks", async () => {
     const handler = vi.fn();
     const registry = createMockPluginRegistry([{ hookName: "llm_output", handler }]);
