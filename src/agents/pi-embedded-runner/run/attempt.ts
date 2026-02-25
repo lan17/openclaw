@@ -16,8 +16,8 @@ import { getMachineDisplayName } from "../../../infra/machine-name.js";
 import { MAX_IMAGE_BYTES } from "../../../media/constants.js";
 import { getGlobalHookRunner } from "../../../plugins/hook-runner-global.js";
 import type {
-  PluginHookAgentContext,
   PluginHookAfterToolsResolvedEvent,
+  PluginHookAgentContext,
   PluginHookBeforeAgentStartResult,
   PluginHookBeforePromptBuildResult,
 } from "../../../plugins/types.js";
@@ -177,14 +177,6 @@ export function injectHistoryImagesIntoMessages(
   return didMutate;
 }
 
-function cloneToolParametersForHook(parameters: unknown): unknown {
-  try {
-    return structuredClone(parameters);
-  } catch {
-    return undefined;
-  }
-}
-
 export function buildAfterToolsResolvedToolMetadata(
   tools: Array<{ name?: string; label?: string; description?: string; parameters?: unknown }>,
 ): PluginHookAfterToolsResolvedEvent["tools"] {
@@ -204,10 +196,7 @@ export function buildAfterToolsResolvedToolMetadata(
       }
 
       if (tool.parameters !== undefined) {
-        const clonedParameters = cloneToolParametersForHook(tool.parameters);
-        if (clonedParameters !== undefined) {
-          meta.parameters = clonedParameters;
-        }
+        meta.parameters = tool.parameters;
       }
 
       return meta;
