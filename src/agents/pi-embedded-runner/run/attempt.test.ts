@@ -3,6 +3,7 @@ import type { ImageContent } from "@mariozechner/pi-ai";
 import { describe, expect, it, vi } from "vitest";
 import type { OpenClawConfig } from "../../../config/config.js";
 import {
+  buildAfterToolsResolvedToolMetadata,
   injectHistoryImagesIntoMessages,
   resolveAttemptFsWorkspaceOnly,
   resolvePromptBuildHookResult,
@@ -62,6 +63,26 @@ describe("injectHistoryImagesIntoMessages", () => {
     expect(didMutate).toBe(false);
     const firstAssistant = messages[0] as Extract<AgentMessage, { role: "assistant" }> | undefined;
     expect(firstAssistant?.content).toBe("noop");
+  });
+});
+
+describe("buildAfterToolsResolvedToolMetadata", () => {
+  it("passes parameters by reference", () => {
+    const parameters = {
+      type: "object",
+      properties: { command: { type: "string" } },
+    };
+    const tools = [{ name: "exec", parameters }];
+
+    const metadata = buildAfterToolsResolvedToolMetadata(tools);
+    expect(metadata[0]?.parameters).toBe(parameters);
+  });
+
+  it("keeps tools with undefined parameters", () => {
+    const metadata = buildAfterToolsResolvedToolMetadata([{ name: "client_tool" }]);
+    expect(metadata).toHaveLength(1);
+    expect(metadata[0]).toMatchObject({ name: "client_tool" });
+    expect(metadata[0]?.parameters).toBeUndefined();
   });
 });
 

@@ -58,6 +58,13 @@ describe("roleScopesAllow", () => {
         allowedScopes: ["operator.admin"],
       }),
     ).toBe(true);
+    expect(
+      roleScopesAllow({
+        role: "operator",
+        requestedScopes: ["operator.write", "operator.approvals"],
+        allowedScopes: ["operator.admin"],
+      }),
+    ).toBe(true);
   });
 
   it("does not treat operator.admin as satisfying non-operator scopes", () => {
@@ -66,6 +73,16 @@ describe("roleScopesAllow", () => {
         role: "operator",
         requestedScopes: ["system.run"],
         allowedScopes: ["operator.admin"],
+      }),
+    ).toBe(false);
+  });
+
+  it("does not treat non-admin scopes as supersets of each other", () => {
+    expect(
+      roleScopesAllow({
+        role: "operator",
+        requestedScopes: ["operator.write"],
+        allowedScopes: ["operator.approvals"],
       }),
     ).toBe(false);
   });
