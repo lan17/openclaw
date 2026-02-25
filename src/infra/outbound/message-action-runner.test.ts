@@ -424,6 +424,15 @@ describe("runMessageAction context isolation", () => {
 });
 
 describe("runMessageAction sendAttachment hydration", () => {
+  const cfg = {
+    channels: {
+      bluebubbles: {
+        enabled: true,
+        serverUrl: "http://localhost:1234",
+        password: "test-password",
+      },
+    },
+  } as OpenClawConfig;
   const attachmentPlugin: ChannelPlugin = {
     id: "bluebubbles",
     meta: {
@@ -433,15 +442,15 @@ describe("runMessageAction sendAttachment hydration", () => {
       docsPath: "/channels/bluebubbles",
       blurb: "BlueBubbles test plugin.",
     },
-    capabilities: { chatTypes: ["direct"], media: true },
+    capabilities: { chatTypes: ["direct", "group"], media: true },
     config: {
       listAccountIds: () => ["default"],
       resolveAccount: () => ({ enabled: true }),
       isConfigured: () => true,
     },
     actions: {
-      listActions: () => ["sendAttachment"],
-      supportsAction: ({ action }) => action === "sendAttachment",
+      listActions: () => ["sendAttachment", "setGroupIcon"],
+      supportsAction: ({ action }) => action === "sendAttachment" || action === "setGroupIcon",
       handleAction: async ({ params }) =>
         jsonResult({
           ok: true,
@@ -476,17 +485,46 @@ describe("runMessageAction sendAttachment hydration", () => {
     vi.clearAllMocks();
   });
 
-  it("hydrates buffer and filename from media for sendAttachment", async () => {
-    const cfg = {
-      channels: {
-        bluebubbles: {
-          enabled: true,
-          serverUrl: "http://localhost:1234",
-          password: "test-password",
-        },
-      },
-    } as OpenClawConfig;
+  async function restoreRealMediaLoader() {
+    const actual = await vi.importActual<typeof import("../../web/media.js")>("../../web/media.js");
+    vi.mocked(loadWebMedia).mockImplementation(actual.loadWebMedia);
+  }
 
+  async function expectRejectsLocalAbsolutePathWithoutSandbox(params: {
+    action: "sendAttachment" | "setGroupIcon";
+    target: string;
+    message?: string;
+    tempPrefix: string;
+  }) {
+    await restoreRealMediaLoader();
+
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), params.tempPrefix));
+    try {
+      const outsidePath = path.join(tempDir, "secret.txt");
+      await fs.writeFile(outsidePath, "secret", "utf8");
+
+      const actionParams: Record<string, unknown> = {
+        channel: "bluebubbles",
+        target: params.target,
+        media: outsidePath,
+      };
+      if (params.message) {
+        actionParams.message = params.message;
+      }
+
+      await expect(
+        runMessageAction({
+          cfg,
+          action: params.action,
+          params: actionParams,
+        }),
+      ).rejects.toThrow(/allowed directory|path-not-allowed/i);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  }
+
+  it("hydrates buffer and filename from media for sendAttachment", async () => {
     const result = await runMessageAction({
       cfg,
       action: "sendAttachment",
@@ -508,18 +546,18 @@ describe("runMessageAction sendAttachment hydration", () => {
     expect((result.payload as { buffer?: string }).buffer).toBe(
       Buffer.from("hello").toString("base64"),
     );
+    const call = vi.mocked(loadWebMedia).mock.calls[0];
+    expect(call?.[1]).toEqual(
+      expect.objectContaining({
+        localRoots: expect.any(Array),
+      }),
+    );
+    expect((call?.[1] as { sandboxValidated?: boolean } | undefined)?.sandboxValidated).not.toBe(
+      true,
+    );
   });
 
   it("rewrites sandboxed media paths for sendAttachment", async () => {
-    const cfg = {
-      channels: {
-        bluebubbles: {
-          enabled: true,
-          serverUrl: "http://localhost:1234",
-          password: "test-password",
-        },
-      },
-    } as OpenClawConfig;
     await withSandbox(async (sandboxDir) => {
       await runMessageAction({
         cfg,
@@ -535,6 +573,28 @@ describe("runMessageAction sendAttachment hydration", () => {
 
       const call = vi.mocked(loadWebMedia).mock.calls[0];
       expect(call?.[0]).toBe(path.join(sandboxDir, "data", "pic.png"));
+      expect(call?.[1]).toEqual(
+        expect.objectContaining({
+          sandboxValidated: true,
+        }),
+      );
+    });
+  });
+
+  it("rejects local absolute path for sendAttachment when sandboxRoot is missing", async () => {
+    await expectRejectsLocalAbsolutePathWithoutSandbox({
+      action: "sendAttachment",
+      target: "+15551234567",
+      message: "caption",
+      tempPrefix: "msg-attachment-",
+    });
+  });
+
+  it("rejects local absolute path for setGroupIcon when sandboxRoot is missing", async () => {
+    await expectRejectsLocalAbsolutePathWithoutSandbox({
+      action: "setGroupIcon",
+      target: "group:123",
+      tempPrefix: "msg-group-icon-",
     });
   });
 });
@@ -646,7 +706,8 @@ describe("runMessageAction sandboxed media validation", () => {
       if (result.kind !== "send") {
         throw new Error("expected send result");
       }
-      expect(result.sendResult?.mediaUrl).toBe(tmpFile);
+      // runMessageAction normalizes media paths through platform resolution.
+      expect(result.sendResult?.mediaUrl).toBe(path.resolve(tmpFile));
       const hostTmpOutsideOpenClaw = path.join(os.tmpdir(), "outside-openclaw", "test-media.png");
       await expect(
         runMessageAction({
