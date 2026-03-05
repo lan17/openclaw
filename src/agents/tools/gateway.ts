@@ -113,14 +113,6 @@ function resolveGatewayOverrideToken(params: {
   }).token;
 }
 
-function trimToUndefined(v: unknown): string | undefined {
-  if (typeof v !== "string") {
-    return undefined;
-  }
-  const trimmed = v.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
-
 export function resolveGatewayOptions(opts?: GatewayCallOptions) {
   const cfg = loadConfig();
   const validatedOverride =
