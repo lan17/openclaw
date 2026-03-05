@@ -4,7 +4,7 @@
   "description": "OpenClaw Agent Control plugin",
   "type": "module",
   "dependencies": {
-    "agent-control": "^0.1.1"
+    "agent-control": "^1.0.1"
   },
   "devDependencies": {
     "openclaw": "workspace:*"

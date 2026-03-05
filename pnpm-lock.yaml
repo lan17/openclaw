@@ -261,6 +261,16 @@ importers:
         specifier: 0.1.15
         version: 0.1.15(zod@4.3.6)
 
+  extensions/agent-control:
+    dependencies:
+      agent-control:
+        specifier: ^1.0.1
+        version: 1.0.1
+    devDependencies:
+      openclaw:
+        specifier: workspace:*
+        version: link:../..
+
   extensions/bluebubbles:
     dependencies:
       zod:
@@ -3312,6 +3322,10 @@ packages:
   agent-base@7.1.4:
     resolution: {integrity: sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ==}
     engines: {node: '>= 14'}
+
+  agent-control@1.0.1:
+    resolution: {integrity: sha512-zg8Mv8hDr3h+BgTbB9y0/G8cYX8WN8kwQh0VHgprB5stpifF464ftHmpOHK9EeYmTZ6FQ/ygBI4UTnht7jmCog==}
+    engines: {node: '>=20'}
 
   ajv-formats@3.0.1:
     resolution: {integrity: sha512-8iUql50EUR+uUcdRQ3HDqa6EVyo3docL8g5WJ3FNcWmu62IbkGUue/pEyLBW8VGKKucTPgqeks4fIU1DA4yowQ==}
@@ -9420,6 +9434,10 @@ snapshots:
     optional: true
 
   agent-base@7.1.4: {}
+
+  agent-control@1.0.1:
+    dependencies:
+      zod: 4.3.6
 
   ajv-formats@3.0.1(ajv@8.18.0):
     optionalDependencies:

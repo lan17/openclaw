@@ -26,7 +26,6 @@ type AgentControlStep = {
 
 type AgentState = {
   sourceAgentId: string;
-  agentUuid: string;
   agentName: string;
   steps: AgentControlStep[];
   stepsHash: string;
@@ -61,20 +60,6 @@ function isUuid(value: string): boolean {
 
 function trimToMax(value: string, maxLen: number): string {
   return value.length <= maxLen ? value : value.slice(0, maxLen);
-}
-
-function buildDeterministicUuid(seed: string): string {
-  const hex = createHash("sha256").update(seed).digest("hex").slice(0, 32).split("");
-  hex[12] = "5";
-  const variantNibble = Number.parseInt(hex[16] ?? "0", 16);
-  hex[16] = ((variantNibble & 0x3) | 0x8).toString(16);
-  return [
-    hex.slice(0, 8).join(""),
-    hex.slice(8, 12).join(""),
-    hex.slice(12, 16).join(""),
-    hex.slice(16, 20).join(""),
-    hex.slice(20, 32).join(""),
-  ].join("-");
 }
 
 function hashSteps(steps: AgentControlStep[]): string {
@@ -220,6 +205,7 @@ export default function register(api: OpenClawPluginApi) {
   if (configuredAgentId && !isUuid(configuredAgentId)) {
     api.logger.warn(`agent-control: configured agentId is not a UUID: ${configuredAgentId}`);
   }
+  const hasConfiguredAgentId = configuredAgentId ? isUuid(configuredAgentId) : false;
 
   const failClosed = cfg.failClosed === true;
   const baseAgentName = asString(cfg.agentName) ?? "openclaw-agent";
@@ -242,18 +228,12 @@ export default function register(api: OpenClawPluginApi) {
       return existing;
     }
 
-    const agentUuid =
-      configuredAgentId && isUuid(configuredAgentId)
-        ? configuredAgentId
-        : buildDeterministicUuid(`openclaw:agent-control:${sourceAgentId}`);
-    const agentName =
-      configuredAgentId && isUuid(configuredAgentId)
-        ? trimToMax(baseAgentName, 255)
-        : trimToMax(`${baseAgentName}:${sourceAgentId}`, 255);
+    const agentName = hasConfiguredAgentId
+      ? trimToMax(baseAgentName, 255)
+      : trimToMax(`${baseAgentName}:${sourceAgentId}`, 255);
 
     const created: AgentState = {
       sourceAgentId,
-      agentUuid,
       agentName,
       steps: [],
       stepsHash: hashSteps([]),
@@ -275,14 +255,14 @@ export default function register(api: OpenClawPluginApi) {
 
     const currentHash = state.stepsHash;
     const promise = (async () => {
-      await client.agents.initAgentApiV1AgentsInitAgentPost({
+      await client.agents.init({
         agent: {
-          agentId: state.agentUuid,
           agentName: state.agentName,
           agentVersion: configuredAgentVersion,
           agentMetadata: {
             source: "openclaw",
             openclawAgentId: state.sourceAgentId,
+            ...(configuredAgentId ? { openclawConfiguredAgentId: configuredAgentId } : {}),
             pluginId: api.id,
           },
         },
@@ -341,9 +321,9 @@ export default function register(api: OpenClawPluginApi) {
       }
 
       try {
-        const evaluation = await client.evaluation.evaluateApiV1EvaluationPost({
+        const evaluation = await client.evaluation.evaluate({
           body: {
-            agentUuid: state.agentUuid,
+            agentName: state.agentName,
             stage: "pre",
             step: {
               type: "tool",

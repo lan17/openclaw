@@ -19,10 +19,10 @@ vi.mock("agent-control", () => {
   class MockAgentControlClient {
     init = clientInitMock;
     agents = {
-      initAgentApiV1AgentsInitAgentPost: initAgentMock,
+      init: initAgentMock,
     };
     evaluation = {
-      evaluateApiV1EvaluationPost: evaluateMock,
+      evaluate: evaluateMock,
     };
   }
 
@@ -201,6 +201,7 @@ describe("agent-control plugin", () => {
     expect(evaluateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         body: expect.objectContaining({
+          agentName: "openclaw-agent:main",
           stage: "pre",
           step: expect.objectContaining({
             type: "tool",
