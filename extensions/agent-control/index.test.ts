@@ -174,6 +174,54 @@ describe("agent-control plugin", () => {
     );
   });
 
+  it("sanitizes symbol-keyed tool schemas before sync", async () => {
+    initAgentMock.mockResolvedValue({ created: true, controls: [] });
+    evaluateMock.mockResolvedValue({ isSafe: true, confidence: 1, reason: null });
+    const rootSymbol = Symbol("root");
+    const nestedSymbol = Symbol("nested");
+    createOpenClawCodingToolsMock.mockReturnValue([{ name: "exec" }]);
+    toToolDefinitionsMock.mockReturnValue([
+      {
+        name: "exec",
+        description: "Run shell command",
+        parameters: {
+          type: "object",
+          properties: {
+            command: { type: "string", [nestedSymbol]: "drop-me" },
+          },
+          required: ["command"],
+          [rootSymbol]: "drop-me",
+        },
+      },
+    ]);
+
+    const { api, hooks } = createApi({ serverUrl: "http://localhost:8000" });
+    register(api as any);
+
+    await hooks.before_tool_call.handler(
+      {
+        toolName: "exec",
+        params: { command: "echo hi" },
+      },
+      {
+        agentId: "main",
+        sessionKey: "session-1",
+      },
+    );
+
+    const initPayload = initAgentMock.mock.calls[0]?.[0] as {
+      steps?: Array<Record<string, unknown>>;
+    };
+    const execStep = initPayload.steps?.find((step) => step.name === "exec");
+    const schema = execStep?.inputSchema as Record<string, unknown> | undefined;
+
+    expect(schema).toBeDefined();
+    expect(Object.getOwnPropertySymbols(schema ?? {}).length).toBe(0);
+    const properties = (schema?.properties ?? {}) as Record<string, unknown>;
+    const command = (properties.command ?? {}) as Record<string, unknown>;
+    expect(Object.getOwnPropertySymbols(command).length).toBe(0);
+  });
+
   it("blocks tool execution when evaluation is unsafe", async () => {
     initAgentMock.mockResolvedValue({ created: true, controls: [] });
     evaluateMock.mockResolvedValue({

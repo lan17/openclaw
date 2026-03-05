@@ -54,6 +54,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function toJsonRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  try {
+    const encoded = JSON.stringify(value);
+    if (typeof encoded !== "string") {
+      return undefined;
+    }
+    const parsed = JSON.parse(encoded) as unknown;
+    return isRecord(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function isUuid(value: string): boolean {
   return UUID_RE.test(value);
 }
@@ -87,8 +103,9 @@ function buildSteps(
       step.description = description;
     }
 
-    if (isRecord(tool.parameters)) {
-      step.inputSchema = tool.parameters;
+    const inputSchema = toJsonRecord(tool.parameters);
+    if (inputSchema) {
+      step.inputSchema = inputSchema;
     }
 
     const label = asString(tool.label);
