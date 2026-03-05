@@ -1,9 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import register from "./index.js";
 
-const clientInitMock = vi.fn();
-const initAgentMock = vi.fn();
-const evaluateMock = vi.fn();
+const {
+  clientInitMock,
+  initAgentMock,
+  evaluateMock,
+  createOpenClawCodingToolsMock,
+  toToolDefinitionsMock,
+} = vi.hoisted(() => ({
+  clientInitMock: vi.fn(),
+  initAgentMock: vi.fn(),
+  evaluateMock: vi.fn(),
+  createOpenClawCodingToolsMock: vi.fn(),
+  toToolDefinitionsMock: vi.fn(),
+}));
 
 vi.mock("agent-control", () => {
   class MockAgentControlClient {
@@ -18,6 +28,14 @@ vi.mock("agent-control", () => {
 
   return { AgentControlClient: MockAgentControlClient };
 });
+
+vi.mock("../../src/agents/pi-tools.js", () => ({
+  createOpenClawCodingTools: createOpenClawCodingToolsMock,
+}));
+
+vi.mock("../../src/agents/pi-tool-definition-adapter.js", () => ({
+  toToolDefinitions: toToolDefinitionsMock,
+}));
 
 type HookRegistration = {
   handler: (...args: any[]) => Promise<unknown> | unknown;
@@ -49,6 +67,8 @@ describe("agent-control plugin", () => {
     clientInitMock.mockReset();
     initAgentMock.mockReset();
     evaluateMock.mockReset();
+    createOpenClawCodingToolsMock.mockReset().mockReturnValue([]);
+    toToolDefinitionsMock.mockReset().mockReturnValue([]);
   });
 
   it("registers hooks and initializes SDK client", () => {
@@ -61,42 +81,73 @@ describe("agent-control plugin", () => {
         serverUrl: "http://localhost:8000",
       }),
     );
-    expect(hooks.after_tools_resolved).toBeDefined();
+    expect(hooks.after_tools_resolved).toBeUndefined();
     expect(hooks.before_tool_call).toBeDefined();
     expect(hooks.before_tool_call.opts?.priority).toBe(100);
   });
 
-  it("syncs agent and tool schemas on after_tools_resolved", async () => {
+  it("syncs agent and tool schemas before evaluating before_tool_call", async () => {
     initAgentMock.mockResolvedValue({ created: true, controls: [] });
+    evaluateMock.mockResolvedValue({ isSafe: true, confidence: 1, reason: null });
+    createOpenClawCodingToolsMock.mockReturnValue([
+      {
+        name: "exec",
+        description: "Run shell command",
+        parameters: {
+          type: "object",
+          properties: { command: { type: "string" } },
+          required: ["command"],
+        },
+      },
+      {
+        name: "read",
+        label: "Read File",
+      },
+    ]);
+    toToolDefinitionsMock.mockReturnValue([
+      {
+        name: "exec",
+        label: "exec",
+        description: "Run shell command",
+        parameters: {
+          type: "object",
+          properties: { command: { type: "string" } },
+          required: ["command"],
+        },
+      },
+      {
+        name: "read",
+        label: "Read File",
+        description: "",
+      },
+    ]);
+
     const { api, hooks } = createApi({ serverUrl: "http://localhost:8000" });
     register(api as any);
 
-    await hooks.after_tools_resolved.handler(
+    await hooks.before_tool_call.handler(
       {
-        tools: [
-          {
-            name: "exec",
-            description: "Run shell command",
-            parameters: {
-              type: "object",
-              properties: { command: { type: "string" } },
-              required: ["command"],
-            },
-          },
-          {
-            name: "read",
-            label: "Read File",
-          },
-        ],
-        provider: "openai",
-        model: "gpt-5",
+        toolName: "exec",
+        params: { command: "echo hi" },
       },
       {
         agentId: "main",
         sessionKey: "session-1",
+        sessionId: "session-abc",
+        runId: "run-abc",
       },
     );
 
+    expect(createOpenClawCodingToolsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: "main",
+        sessionKey: "session-1",
+        sessionId: "session-abc",
+        runId: "run-abc",
+        senderIsOwner: true,
+      }),
+    );
+    expect(toToolDefinitionsMock).toHaveBeenCalledTimes(1);
     expect(initAgentMock).toHaveBeenCalledTimes(1);
     expect(initAgentMock).toHaveBeenCalledWith(
       expect.objectContaining({

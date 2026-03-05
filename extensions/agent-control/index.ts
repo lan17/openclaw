@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { AgentControlClient } from "agent-control";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import { toToolDefinitions } from "../../src/agents/pi-tool-definition-adapter.js";
+import { createOpenClawCodingTools } from "../../src/agents/pi-tools.js";
 
 type AgentControlPluginConfig = {
   enabled?: boolean;
@@ -113,6 +115,34 @@ function buildSteps(
   }
 
   return [...deduped.values()];
+}
+
+function resolveStepsForContext(params: {
+  api: OpenClawPluginApi;
+  sourceAgentId: string;
+  sessionKey?: string;
+  sessionId?: string;
+  runId?: string;
+}): AgentControlStep[] {
+  const tools = createOpenClawCodingTools({
+    agentId: params.sourceAgentId,
+    sessionKey: params.sessionKey,
+    sessionId: params.sessionId,
+    runId: params.runId,
+    config: params.api.config,
+    // Keep the synced step catalog permissive so guardrail policy sees the full
+    // internal tool surface when sender ownership is unknown in this hook context.
+    senderIsOwner: true,
+  });
+  const toolDefinitions = toToolDefinitions(tools);
+  return buildSteps(
+    toolDefinitions.map((tool) => ({
+      name: tool.name,
+      label: tool.label,
+      description: tool.description,
+      parameters: tool.parameters,
+    })),
+  );
 }
 
 function collectDenyControlNames(response: {
@@ -272,19 +302,6 @@ export default function register(api: OpenClawPluginApi) {
     }
   };
 
-  api.on("after_tools_resolved", async (event, ctx) => {
-    const sourceAgentId = resolveSourceAgentId(ctx.agentId);
-    const state = getOrCreateState(sourceAgentId);
-    state.steps = buildSteps(event.tools);
-    state.stepsHash = hashSteps(state.steps);
-
-    try {
-      await syncAgent(state);
-    } catch (err) {
-      api.logger.warn(`agent-control: initAgent failed for agent=${sourceAgentId}: ${String(err)}`);
-    }
-  });
-
   api.on(
     "before_tool_call",
     async (event, ctx) => {
@@ -296,6 +313,18 @@ export default function register(api: OpenClawPluginApi) {
       );
 
       try {
+        const nextSteps = resolveStepsForContext({
+          api,
+          sourceAgentId,
+          sessionKey: ctx.sessionKey,
+          sessionId: ctx.sessionId,
+          runId: ctx.runId,
+        });
+        const nextStepsHash = hashSteps(nextSteps);
+        if (nextStepsHash !== state.stepsHash) {
+          state.steps = nextSteps;
+          state.stepsHash = nextStepsHash;
+        }
         await syncAgent(state);
       } catch (err) {
         api.logger.warn(
