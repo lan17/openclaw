@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { markdownToSlackMrkdwn, normalizeSlackOutboundText } from "./format.js";
+import {
+  markdownToSlackMrkdwn,
+  markdownToSlackMrkdwnChunks,
+  normalizeSlackOutboundText,
+} from "./format.js";
 import { escapeSlackMrkdwn } from "./monitor/mrkdwn.js";
 
 describe("markdownToSlackMrkdwn", () => {
@@ -49,6 +53,24 @@ describe("markdownToSlackMrkdwn", () => {
     expect(res).toBe("• item\n  • nested");
   });
 
+  it("compacts label-only bullet continuations", () => {
+    const res = markdownToSlackMrkdwn(
+      "- **Prompt injection defense**\n  Block or flag malicious instructions before they reach sensitive tools.",
+    );
+    expect(res).toBe(
+      "• *Prompt injection defense:* Block or flag malicious instructions before they reach sensitive tools.",
+    );
+  });
+
+  it("compacts hard line break label-only bullet continuations", () => {
+    const res = markdownToSlackMrkdwn(
+      "- **Prompt injection defense**  \n  Block or flag malicious instructions before they reach sensitive tools.",
+    );
+    expect(res).toBe(
+      "• *Prompt injection defense:* Block or flag malicious instructions before they reach sensitive tools.",
+    );
+  });
+
   it("handles complex message with multiple elements", () => {
     const res = markdownToSlackMrkdwn(
       "**Important:** Check the _docs_ at [link](https://example.com)\n\n- first\n- second",
@@ -60,6 +82,53 @@ describe("markdownToSlackMrkdwn", () => {
 
   it("does not throw when input is undefined at runtime", () => {
     expect(markdownToSlackMrkdwn(undefined as unknown as string)).toBe("");
+  });
+
+  it("leaves nested bullets unchanged", () => {
+    const res = markdownToSlackMrkdwn(
+      "- **Prompt injection defense**\n  - nested bullet should stay nested",
+    );
+    expect(res).toBe("• *Prompt injection defense*\n  • nested bullet should stay nested");
+  });
+
+  it("leaves blockquote bullets unchanged", () => {
+    const res = markdownToSlackMrkdwn(
+      "> - **Prompt injection defense**\n>   Block or flag malicious instructions before they reach sensitive tools.",
+    );
+    expect(res).toBe(
+      "> • *Prompt injection defense*\nBlock or flag malicious instructions before they reach sensitive tools.",
+    );
+  });
+
+  it("leaves fenced code blocks unchanged", () => {
+    const res = markdownToSlackMrkdwn(
+      "```\n- **Prompt injection defense**\nBlock or flag malicious instructions before they reach sensitive tools.\n```",
+    );
+    expect(res).toBe(
+      "```\n- **Prompt injection defense**\nBlock or flag malicious instructions before they reach sensitive tools.\n```",
+    );
+  });
+
+  it("leaves loose-list paragraphs unchanged", () => {
+    const res = markdownToSlackMrkdwn(
+      "- **Prompt injection defense**\n\n  Block or flag malicious instructions before they reach sensitive tools.",
+    );
+    expect(res).toBe(
+      "• *Prompt injection defense*Block or flag malicious instructions before they reach sensitive tools.",
+    );
+  });
+});
+
+describe("markdownToSlackMrkdwnChunks", () => {
+  it("compacts label-only bullets before chunking", () => {
+    const res = markdownToSlackMrkdwnChunks(
+      "- **Prompt injection defense**\n  Block or flag malicious instructions before they reach sensitive tools.\n- Second bullet with enough text to force a second chunk after compaction.",
+      100,
+    );
+    expect(res).toEqual([
+      "• *Prompt injection defense:* Block or flag malicious instructions before they reach sensitive tools.",
+      "• Second bullet with enough text to force a second chunk after compaction.",
+    ]);
   });
 });
 
@@ -76,5 +145,15 @@ describe("escapeSlackMrkdwn", () => {
 describe("normalizeSlackOutboundText", () => {
   it("normalizes markdown for outbound send/update paths", () => {
     expect(normalizeSlackOutboundText(" **bold** ")).toBe("*bold*");
+  });
+
+  it("compacts label-only bullet continuations", () => {
+    expect(
+      normalizeSlackOutboundText(
+        "- **Prompt injection defense**\n  Block or flag malicious instructions before they reach sensitive tools.",
+      ),
+    ).toBe(
+      "• *Prompt injection defense:* Block or flag malicious instructions before they reach sensitive tools.",
+    );
   });
 });
