@@ -108,6 +108,7 @@ type SlackMarkdownOptions = {
 
 const SLACK_LABEL_TERMINATOR_RE = /[.?!:]$/;
 const SLACK_CONTINUATION_BLOCK_MARKER_RE = /^(?:• |\d+\. |> |```|───)/;
+const SLACK_LIST_PREFIX_RE = /^(?:• |\d+\. )/;
 
 function buildSlackRenderOptions() {
   return {
@@ -132,13 +133,19 @@ function intersectsProtectedStyle(spans: MarkdownStyleSpan[], start: number, end
   return spans.some((span) => span.start < end && span.end > start);
 }
 
+function getSlackListPrefixLength(line: string): number | null {
+  const match = SLACK_LIST_PREFIX_RE.exec(line);
+  return match?.[0]?.length ?? null;
+}
+
 function isBoldLabelLine(
   text: string,
   styles: MarkdownStyleSpan[],
   lineStart: number,
   lineEnd: number,
+  prefixLength: number,
 ): boolean {
-  let labelStart = lineStart + 2;
+  let labelStart = lineStart + prefixLength;
   let labelEnd = lineEnd;
 
   while (labelStart < labelEnd && /\s/.test(text[labelStart] ?? "")) {
@@ -233,19 +240,25 @@ function compactSlackLabelContinuations(ir: MarkdownIR): MarkdownIR {
   const protectedStyles = ir.styles.filter(
     (span) => span.style === "blockquote" || span.style === "code_block",
   );
-  const segments: { lineEnd: number; paragraphEnd: number; continuationCount: number }[] = [];
+  const segments: {
+    lineEnd: number;
+    paragraphEnd: number;
+    flattenContinuation: boolean;
+    insertColon: boolean;
+  }[] = [];
   const insertionPositions: number[] = [];
 
   let lineStart = 0;
   while (lineStart < text.length) {
     const lineEnd = findLineEnd(text, lineStart);
     const line = text.slice(lineStart, lineEnd);
-
-    if (
-      line.startsWith("• ") &&
+    const prefixLength = getSlackListPrefixLength(line);
+    const isBoldLabel =
+      prefixLength != null &&
       !intersectsProtectedStyle(protectedStyles, lineStart, lineEnd) &&
-      isBoldLabelLine(text, ir.styles, lineStart, lineEnd)
-    ) {
+      isBoldLabelLine(text, ir.styles, lineStart, lineEnd, prefixLength);
+
+    if (prefixLength != null && !intersectsProtectedStyle(protectedStyles, lineStart, lineEnd)) {
       let paragraphEnd = lineEnd;
       let continuationCount = 0;
       let nextStart = lineEnd < text.length ? lineEnd + 1 : text.length;
@@ -265,10 +278,20 @@ function compactSlackLabelContinuations(ir: MarkdownIR): MarkdownIR {
       }
 
       if (paragraphEnd > lineEnd) {
-        segments.push({ lineEnd, paragraphEnd, continuationCount });
-        insertionPositions.push(lineEnd);
-        lineStart = paragraphEnd < text.length ? paragraphEnd + 1 : text.length;
-        continue;
+        const flattenContinuation = continuationCount === 1;
+        if (isBoldLabel || flattenContinuation) {
+          segments.push({
+            lineEnd,
+            paragraphEnd,
+            flattenContinuation,
+            insertColon: isBoldLabel,
+          });
+          if (isBoldLabel) {
+            insertionPositions.push(lineEnd);
+          }
+          lineStart = paragraphEnd < text.length ? paragraphEnd + 1 : text.length;
+          continue;
+        }
       }
     }
 
@@ -285,8 +308,10 @@ function compactSlackLabelContinuations(ir: MarkdownIR): MarkdownIR {
   for (const segment of segments) {
     const body = text.slice(segment.lineEnd, segment.paragraphEnd);
     compactedText += text.slice(cursor, segment.lineEnd);
-    compactedText += ":";
-    compactedText += segment.continuationCount === 1 ? body.replace("\n", " ") : body;
+    if (segment.insertColon) {
+      compactedText += ":";
+    }
+    compactedText += segment.flattenContinuation ? body.replace("\n", " ") : body;
     cursor = segment.paragraphEnd;
   }
 

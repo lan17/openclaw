@@ -76,6 +76,25 @@ describe("markdownToSlackMrkdwn", () => {
     expect(res).toBe("• *Ports:*\n80/tcp\n443/tcp");
   });
 
+  it("compacts plain bullet continuations", () => {
+    const res = markdownToSlackMrkdwn(
+      "- This matters\n  because Slack used to render this as one bullet.",
+    );
+    expect(res).toBe("• This matters because Slack used to render this as one bullet.");
+  });
+
+  it("compacts ordered-list continuations", () => {
+    const res = markdownToSlackMrkdwn(
+      "1. This matters\n   because Slack used to render this as one item.",
+    );
+    expect(res).toBe("1. This matters because Slack used to render this as one item.");
+  });
+
+  it("preserves multi-line plain bullet bodies", () => {
+    const res = markdownToSlackMrkdwn("- Ports\n  80/tcp\n  443/tcp");
+    expect(res).toBe("• Ports\n80/tcp\n443/tcp");
+  });
+
   it("handles complex message with multiple elements", () => {
     const res = markdownToSlackMrkdwn(
       "**Important:** Check the _docs_ at [link](https://example.com)\n\n- first\n- second",
