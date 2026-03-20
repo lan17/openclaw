@@ -233,7 +233,7 @@ function compactSlackLabelContinuations(ir: MarkdownIR): MarkdownIR {
   const protectedStyles = ir.styles.filter(
     (span) => span.style === "blockquote" || span.style === "code_block",
   );
-  const segments: { lineEnd: number; paragraphEnd: number }[] = [];
+  const segments: { lineEnd: number; paragraphEnd: number; continuationCount: number }[] = [];
   const insertionPositions: number[] = [];
 
   let lineStart = 0;
@@ -247,6 +247,7 @@ function compactSlackLabelContinuations(ir: MarkdownIR): MarkdownIR {
       isBoldLabelLine(text, ir.styles, lineStart, lineEnd)
     ) {
       let paragraphEnd = lineEnd;
+      let continuationCount = 0;
       let nextStart = lineEnd < text.length ? lineEnd + 1 : text.length;
 
       while (nextStart < text.length) {
@@ -259,11 +260,12 @@ function compactSlackLabelContinuations(ir: MarkdownIR): MarkdownIR {
           break;
         }
         paragraphEnd = nextLineEnd;
+        continuationCount += 1;
         nextStart = nextLineEnd < text.length ? nextLineEnd + 1 : text.length;
       }
 
       if (paragraphEnd > lineEnd) {
-        segments.push({ lineEnd, paragraphEnd });
+        segments.push({ lineEnd, paragraphEnd, continuationCount });
         insertionPositions.push(lineEnd);
         lineStart = paragraphEnd < text.length ? paragraphEnd + 1 : text.length;
         continue;
@@ -281,9 +283,10 @@ function compactSlackLabelContinuations(ir: MarkdownIR): MarkdownIR {
   let cursor = 0;
 
   for (const segment of segments) {
+    const body = text.slice(segment.lineEnd, segment.paragraphEnd);
     compactedText += text.slice(cursor, segment.lineEnd);
     compactedText += ":";
-    compactedText += text.slice(segment.lineEnd, segment.paragraphEnd).replaceAll("\n", " ");
+    compactedText += segment.continuationCount === 1 ? body.replace("\n", " ") : body;
     cursor = segment.paragraphEnd;
   }
 

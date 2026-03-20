@@ -71,6 +71,11 @@ describe("markdownToSlackMrkdwn", () => {
     );
   });
 
+  it("preserves multi-line bullet bodies", () => {
+    const res = markdownToSlackMrkdwn("- **Ports**\n  80/tcp\n  443/tcp");
+    expect(res).toBe("• *Ports:*\n80/tcp\n443/tcp");
+  });
+
   it("handles complex message with multiple elements", () => {
     const res = markdownToSlackMrkdwn(
       "**Important:** Check the _docs_ at [link](https://example.com)\n\n- first\n- second",
